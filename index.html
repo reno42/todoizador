@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-view To-Do List</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="app" class="container">
+        <h1 class="title">Multi-view To-Do List</h1>
+        
+        <div class="task-form">
+            <input type="text" id="taskTitle" placeholder="New task" class="input">
+            <input type="number" id="estimatedTime" min="1" placeholder="Est. time (hours)" class="input">
+            <div class="time-input">
+                <input type="number" id="startTime" min="1" max="12" placeholder="Start time" class="input">
+                <select id="startPeriod" class="input">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                </select>
+            </div>
+            <label class="priority-label">
+                <input type="checkbox" id="priority">
+                Priority
+            </label>
+            <button id="addTask" class="btn btn-primary">Add Task</button>
+        </div>
+
+        <div class="view-buttons">
+            <button id="todoView" class="btn btn-view"><i data-lucide="list"></i></button>
+            <button id="kanbanView" class="btn btn-view"><i data-lucide="columns"></i></button>
+            <button id="tableView" class="btn btn-view"><i data-lucide="table"></i></button>
+            <button id="calendarView" class="btn btn-view"><i data-lucide="calendar"></i></button>
+        </div>
+
+        <div id="effectiveness" class="effectiveness"></div>
+
+        <div id="alert" class="alert hidden">
+            <p class="alert-title">¡Atención!</p>
+            <p class="alert-description">Estás muy indeciso con esta tarea. Espero que puedas darle solución.</p>
+        </div>
+
+        <div id="taskContainer" class="task-container"></div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
