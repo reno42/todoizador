@@ -1,6 +1,11 @@
 let tasks = [];
 let view = 'todo';
 let effectiveness = 0;
+let timer;
+let timerDuration = 0;
+let timerRunning = false;
+let currentTaskId = null;
+let classifierEnabled = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
@@ -14,6 +19,9 @@ function setupEventListeners() {
     document.getElementById('kanbanView').addEventListener('click', () => setView('kanban'));
     document.getElementById('tableView').addEventListener('click', () => setView('table'));
     document.getElementById('calendarView').addEventListener('click', () => setView('calendar'));
+    document.getElementById('startTimer').addEventListener('click', startTimer);
+    document.getElementById('pauseTimer').addEventListener('click', pauseTimer);
+    document.getElementById('resetTimer').addEventListener('click', resetTimer);
 }
 
 function addTask() {
@@ -23,7 +31,7 @@ function addTask() {
     const startPeriod = document.getElementById('startPeriod').value;
     const priority = document.getElementById('priority').checked;
 
-    if (!title) return;
+    if (!title || !estimatedTime || estimatedTime > 90) return;
 
     const startHour = startPeriod === 'PM' && startTime !== 12 
         ? startTime + 12 
@@ -120,7 +128,6 @@ function renderTasks() {
             break;
     }
     
-    // Recreate Lucide icons after rendering
     lucide.createIcons();
 }
 
@@ -135,28 +142,82 @@ function createDeleteButton(taskId) {
     return deleteBtn;
 }
 
+function createStartTimerButton(task) {
+    const startTimerBtn = document.createElement('button');
+    startTimerBtn.className = 'start-timer-btn';
+    startTimerBtn.textContent = 'Start Timer';
+    startTimerBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        startTaskTimer(task);
+    });
+    return startTimerBtn;
+}
+
 function renderTodoView() {
     const div = document.createElement('div');
     div.className = 'todo-container';
 
-    tasks.forEach(task => {
-        const taskDiv = document.createElement('div');
-        taskDiv.className = `task-item ${task.priority ? 'priority' : ''}`;
-        taskDiv.innerHTML = `
-            <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}>
-            <span class="task-title ${task.completed ? 'line-through' : ''}">${task.title}</span>
-            <span class="task-time">
-                (${task.estimatedTime}h, starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'})
-            </span>
-        `;
-
-        taskDiv.querySelector('.task-checkbox').addEventListener('change', () => toggleTask(task.id));
-        taskDiv.appendChild(createDeleteButton(task.id));
-
-        div.appendChild(taskDiv);
+    const classifierSwitch = document.createElement('label');
+    classifierSwitch.className = 'switch';
+    classifierSwitch.innerHTML = `
+        <input type="checkbox" id="classifierToggle" ${classifierEnabled ? 'checked' : ''}>
+        <span class="slider round"></span>
+        <span class="switch-label">Clasificador</span>
+    `;
+    classifierSwitch.querySelector('input').addEventListener('change', (e) => {
+        classifierEnabled = e.target.checked;
+        renderTasks();
     });
+    div.appendChild(classifierSwitch);
+
+    if (classifierEnabled) {
+        const importantTasks = document.createElement('div');
+        importantTasks.className = 'task-section';
+        importantTasks.innerHTML = '<h2>Lo más importante del día</h2>';
+
+        const optionalTasks = document.createElement('div');
+        optionalTasks.className = 'task-section';
+        optionalTasks.innerHTML = '<h2>Todo bien si no lo hago, si logro mis metas, puedo hacer esto</h2>';
+
+        tasks.forEach(task => {
+            const taskDiv = createTaskElement(task);
+            if (task.estimatedTime >= 45) {
+                importantTasks.appendChild(taskDiv);
+            } else {
+                optionalTasks.appendChild(taskDiv);
+            }
+        });
+
+        div.appendChild(importantTasks);
+        div.appendChild(optionalTasks);
+    } else {
+        const taskList = document.createElement('div');
+        taskList.className = 'task-list';
+        tasks.forEach(task => {
+            taskList.appendChild(createTaskElement(task));
+        });
+        div.appendChild(taskList);
+    }
 
     return div;
+}
+
+function createTaskElement(task) {
+    const taskDiv = document.createElement('div');
+    taskDiv.className = `task-item ${task.priority ? 'priority' : ''}`;
+    taskDiv.innerHTML = `
+        <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}>
+        <span class="task-title ${task.completed ? 'line-through' : ''}">${task.title}</span>
+        <span class="task-time">
+            (${task.estimatedTime}m, starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'})
+        </span>
+    `;
+
+    taskDiv.querySelector('.task-checkbox').addEventListener('change', () => toggleTask(task.id));
+    taskDiv.appendChild(createStartTimerButton(task));
+    taskDiv.appendChild(createDeleteButton(task.id));
+
+    return taskDiv;
 }
 
 function renderKanbanView() {
@@ -175,10 +236,11 @@ function renderKanbanView() {
             taskDiv.className = `kanban-task ${task.priority ? 'priority' : ''}`;
             taskDiv.draggable = true;
             taskDiv.innerHTML = `
-                <span>${task.title} (Starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'})</span>
+                <span>${task.title} (${task.estimatedTime}m, Starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'})</span>
             `;
 
             taskDiv.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', task.id));
+            taskDiv.appendChild(createStartTimerButton(task));
             taskDiv.appendChild(createDeleteButton(task.id));
 
             column.appendChild(taskDiv);
@@ -221,13 +283,15 @@ function renderTableView() {
         tr.innerHTML = `
             <td data-label="Task">${task.title}</td>
             <td data-label="Priority">${task.priority ? 'High' : 'Normal'}</td>
-            <td data-label="Est. Time">${task.estimatedTime}h</td>
+            <td data-label="Est. Time">${task.estimatedTime}m</td>
             <td data-label="Start Time">${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'}</td>
             <td data-label="Status">${task.completed ? 'Done' : 'Pending'}</td>
             <td data-label="Actions"></td>
         `;
 
-        tr.querySelector('td[data-label="Actions"]').appendChild(createDeleteButton(task.id));
+        const actionsCell = tr.querySelector('td[data-label="Actions"]');
+        actionsCell.appendChild(createStartTimerButton(task));
+        actionsCell.appendChild(createDeleteButton(task.id));
 
         tbody.appendChild(tr);
     });
@@ -266,9 +330,13 @@ function renderCalendarView() {
                 const taskDiv = document.createElement('div');
                 taskDiv.className = `calendar-task ${task.priority ? 'priority' : ''}`;
                 taskDiv.draggable = true;
-                taskDiv.textContent = task.title;
+                taskDiv.textContent = `${task.title} (${task.estimatedTime}m)`;
 
-                taskDiv.appendChild(createDeleteButton(task.id));
+                const controlsDiv = document.createElement('div');
+                controlsDiv.className = 'calendar-task-controls';
+                controlsDiv.appendChild(createStartTimerButton(task));
+                controlsDiv.appendChild(createDeleteButton(task.id));
+                taskDiv.appendChild(controlsDiv);
 
                 taskDiv.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', task.id));
 
@@ -280,6 +348,65 @@ function renderCalendarView() {
     }
 
     return div;
+}
+
+function startTaskTimer(task) {
+    document.getElementById('timerContainer').classList.remove('hidden');
+    document.getElementById('currentTask').textContent = `Current Task: ${task.title}`;
+    timerDuration = task.estimatedTime * 60;
+    currentTaskId = task.id;
+    updateTimerDisplay();
+    startTimer();
+}
+
+function startTimer() {
+    if (!timerRunning) {
+        timerRunning = true;
+        timer = setInterval(() => {
+            timerDuration--;
+            updateTimerDisplay();
+            if (timerDuration <= 0) {
+                clearInterval(timer);
+                timerRunning = false;
+                playTimerSound();
+                completeTask();
+            }
+        }, 1000);
+    }
+}
+
+function pauseTimer() {
+    clearInterval(timer);
+    timerRunning = false;
+}
+
+function resetTimer() {
+    clearInterval(timer);
+    timerRunning = false;
+    timerDuration = 0;
+    currentTaskId = null;
+    updateTimerDisplay();
+    document.getElementById('timerContainer').classList.add('hidden');
+    document.getElementById('currentTask').textContent = '';
+}
+
+function updateTimerDisplay() {
+    const minutes = Math.floor(timerDuration / 60);
+    const seconds = timerDuration % 60;
+    document.getElementById('timerDisplay').textContent = 
+        `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+function playTimerSound() {
+    const sound = document.getElementById('timerSound');
+    sound.play();
+}
+
+function completeTask() {
+    if (currentTaskId) {
+        toggleTask(currentTaskId);
+        currentTaskId = null;
+    }
 }
 
 // Initialize the view
