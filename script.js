@@ -1,8 +1,7 @@
 let tasks = [];
 let view = 'todo';
 let effectiveness = 0;
-let timer;
-let timerDuration = 0;
+let timerEndTime;
 let timerRunning = false;
 let currentTaskId = null;
 let classifierEnabled = false;
@@ -353,7 +352,7 @@ function renderCalendarView() {
 function startTaskTimer(task) {
     document.getElementById('timerContainer').classList.remove('hidden');
     document.getElementById('currentTask').textContent = `Current Task: ${task.title}`;
-    timerDuration = task.estimatedTime * 60;
+    timerEndTime = new Date(Date.now() + task.estimatedTime * 60 * 1000);
     currentTaskId = task.id;
     updateTimerDisplay();
     startTimer();
@@ -362,37 +361,43 @@ function startTaskTimer(task) {
 function startTimer() {
     if (!timerRunning) {
         timerRunning = true;
-        timer = setInterval(() => {
-            timerDuration--;
-            updateTimerDisplay();
-            if (timerDuration <= 0) {
-                clearInterval(timer);
-                timerRunning = false;
-                playTimerSound();
-                completeTask();
-            }
-        }, 1000);
+        updateTimer();
+    }
+}
+
+function updateTimer() {
+    if (timerRunning) {
+        const now = new Date();
+        const remainingTime = timerEndTime - now;
+
+        if (remainingTime <= 0) {
+            timerRunning = false;
+            playTimerSound();
+            completeTask();
+            updateTimerDisplay(0);
+        } else {
+            updateTimerDisplay(remainingTime);
+            requestAnimationFrame(updateTimer);
+        }
     }
 }
 
 function pauseTimer() {
-    clearInterval(timer);
     timerRunning = false;
 }
 
 function resetTimer() {
-    clearInterval(timer);
     timerRunning = false;
-    timerDuration = 0;
+    timerEndTime = null;
     currentTaskId = null;
-    updateTimerDisplay();
+    updateTimerDisplay(0);
     document.getElementById('timerContainer').classList.add('hidden');
     document.getElementById('currentTask').textContent = '';
 }
 
-function updateTimerDisplay() {
-    const minutes = Math.floor(timerDuration / 60);
-    const seconds = timerDuration % 60;
+function updateTimerDisplay(remainingTime) {
+    const minutes = Math.floor(remainingTime / 60000);
+    const seconds = Math.floor((remainingTime % 60000) / 1000);
     document.getElementById('timerDisplay').textContent = 
         `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
