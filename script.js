@@ -5,11 +5,13 @@ let timerEndTime;
 let timerRunning = false;
 let currentTaskId = null;
 let classifierEnabled = false;
+let madrugadaEnabled = true; // New state variable for the "madrugada" switch
 
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
     setupEventListeners();
     loadTasks(); // Load tasks from localStorage
+    loadMadrugadaEnabled(); // Load "madrugada" switch state
     renderTasks();
 });
 
@@ -421,8 +423,23 @@ function renderCalendarView() {
     printButton.title = 'Print';
     printButton.addEventListener('click', printCalendar);
 
+    // Add "madrugada" switch
+    const madrugadaSwitch = document.createElement('label');
+    madrugadaSwitch.className = 'switch';
+    madrugadaSwitch.innerHTML = `
+        <input type="checkbox" id="madrugadaToggle" ${madrugadaEnabled ? 'checked' : ''}>
+        <span class="slider round"></span>
+        <span class="switch-label">Madrugada</span>
+    `;
+    madrugadaSwitch.querySelector('input').addEventListener('change', (e) => {
+        madrugadaEnabled = e.target.checked;
+        saveMadrugadaEnabled(); // Save "madrugada" switch state
+        renderTasks();
+    });
+
     buttonsDiv.appendChild(downloadPDFButton);
     buttonsDiv.appendChild(printButton);
+    buttonsDiv.appendChild(madrugadaSwitch);
 
     containerDiv.appendChild(buttonsDiv);
 
@@ -434,6 +451,11 @@ function renderCalendarView() {
     calendarDiv.innerHTML = '<div class="calendar-header"></div>' + days.map(day => `<div class="calendar-header">${day}</div>`).join('');
 
     for (let hour = 0; hour < 24; hour++) {
+        // Skip early morning hours if madrugadaEnabled is false
+        if (!madrugadaEnabled && hour >= 0 && hour < 6) {
+            continue;
+        }
+
         const hourDiv = document.createElement('div');
         hourDiv.className = 'calendar-time';
         hourDiv.textContent = `${hour % 12 || 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
@@ -603,10 +625,23 @@ function loadClassifierEnabled() {
     }
 }
 
+// New functions for "madrugada" switch persistence
+function saveMadrugadaEnabled() {
+    localStorage.setItem('madrugadaEnabled', JSON.stringify(madrugadaEnabled));
+}
+
+function loadMadrugadaEnabled() {
+    const savedMadrugadaEnabled = localStorage.setItem('madrugadaEnabled');
+    if (savedMadrugadaEnabled !== null) {
+        madrugadaEnabled = JSON.parse(savedMadrugadaEnabled);
+    }
+}
+
 // Initialize the app
 document.addEventListener('DOMContentLoaded', () => {
     loadTasks();
     loadView();
     loadClassifierEnabled();
+    loadMadrugadaEnabled();
     setView(view);
 });
