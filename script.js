@@ -9,6 +9,7 @@ let classifierEnabled = false;
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
     setupEventListeners();
+    loadTasks(); // Load tasks from localStorage
     renderTasks();
 });
 
@@ -29,6 +30,7 @@ function addTask() {
     const startTime = parseInt(document.getElementById('startTime').value);
     const startPeriod = document.getElementById('startPeriod').value;
     const priority = document.getElementById('priority').checked;
+    const day = parseInt(document.getElementById('taskDay').value);
 
     if (!title || !estimatedTime || estimatedTime > 90) return;
 
@@ -43,10 +45,11 @@ function addTask() {
         startTime: startHour,
         priority,
         completed: false,
-        day: 0,
+        day,
         moveCount: 0
     });
 
+    saveTasks(); // Save tasks to localStorage
     resetForm();
     renderTasks();
 }
@@ -57,17 +60,38 @@ function resetForm() {
     document.getElementById('startTime').value = '';
     document.getElementById('startPeriod').value = 'AM';
     document.getElementById('priority').checked = false;
+    document.getElementById('taskDay').value = '0';
 }
 
 function toggleTask(id) {
     tasks = tasks.map(task => 
         task.id === id ? { ...task, completed: !task.completed } : task
     );
+    saveTasks(); // Save tasks to localStorage
     renderTasks();
 }
 
 function deleteTask(id) {
     tasks = tasks.filter(task => task.id !== id);
+    saveTasks(); // Save tasks to localStorage
+    renderTasks();
+}
+
+function editTask(id, newTitle, newEstimatedTime, newStartTime, newPriority, newDay) {
+    tasks = tasks.map(task => {
+        if (task.id === id) {
+            return {
+                ...task,
+                title: newTitle,
+                estimatedTime: newEstimatedTime,
+                startTime: newStartTime,
+                priority: newPriority,
+                day: newDay
+            };
+        }
+        return task;
+    });
+    saveTasks(); // Save tasks to localStorage
     renderTasks();
 }
 
@@ -83,6 +107,7 @@ function updateTaskTime(id, day, startTime) {
         }
         return task;
     });
+    saveTasks(); // Save tasks to localStorage
     renderTasks();
 }
 
@@ -104,6 +129,7 @@ function setView(newView) {
     document.querySelectorAll('.btn-view').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`${newView}View`).classList.add('active');
     renderTasks();
+    saveView(); // Save current view to localStorage
 }
 
 function renderTasks() {
@@ -130,15 +156,87 @@ function renderTasks() {
     lucide.createIcons();
 }
 
-function createDeleteButton(taskId) {
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.innerHTML = '<i data-lucide="x"></i>';
-    deleteBtn.addEventListener('click', (e) => {
+function createActionButton(task) {
+    const actionBtn = document.createElement('button');
+    actionBtn.className = 'action-btn';
+    actionBtn.innerHTML = '<i data-lucide="more-vertical"></i>';
+    
+    const dropdown = document.createElement('div');
+    dropdown.className = 'action-dropdown hidden';
+    dropdown.innerHTML = `
+        <button class="edit-btn">Edit</button>
+        <button class="delete-btn">Delete</button>
+    `;
+    
+    actionBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        deleteTask(taskId);
+        dropdown.classList.toggle('hidden');
     });
-    return deleteBtn;
+    
+    dropdown.querySelector('.edit-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        showEditModal(task);
+    });
+    
+    dropdown.querySelector('.delete-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteTask(task.id);
+    });
+    
+    const wrapper = document.createElement('div');
+    wrapper.className = 'action-wrapper';
+    wrapper.appendChild(actionBtn);
+    wrapper.appendChild(dropdown);
+    
+    return wrapper;
+}
+
+function showEditModal(task) {
+    const modal = document.createElement('div');
+    modal.className = 'edit-modal';
+    modal.innerHTML = `
+        <h2>Edit Task</h2>
+        <input type="text" id="editTitle" value="${task.title}">
+        <input type="number" id="editEstimatedTime" value="${task.estimatedTime}">
+        <input type="number" id="editStartTime" value="${task.startTime % 12 || 12}">
+        <select id="editStartPeriod">
+            <option value="AM" ${task.startTime < 12 ? 'selected' : ''}>AM</option>
+            <option value="PM" ${task.startTime >= 12 ? 'selected' : ''}>PM</option>
+        </select>
+        <select id="editDay">
+            ${['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day, index) => 
+                `<option value="${index}" ${task.day === index ? 'selected' : ''}>${day}</option>`
+            ).join('')}
+        </select>
+        <label>
+            <input type="checkbox" id="editPriority" ${task.priority ? 'checked' : ''}>
+            Priority
+        </label>
+        <button id="saveEdit">Save</button>
+        <button id="cancelEdit">Cancel</button>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    document.getElementById('saveEdit').addEventListener('click', () => {
+        const newTitle = document.getElementById('editTitle').value;
+        const newEstimatedTime = parseInt(document.getElementById('editEstimatedTime').value);
+        const newStartTime = parseInt(document.getElementById('editStartTime').value);
+        const newStartPeriod = document.getElementById('editStartPeriod').value;
+        const newPriority = document.getElementById('editPriority').checked;
+        const newDay = parseInt(document.getElementById('editDay').value);
+        
+        const newStartHour = newStartPeriod === 'PM' && newStartTime !== 12 
+            ? newStartTime + 12 
+            : newStartTime === 12 && newStartPeriod === 'AM' ? 0 : newStartTime;
+        
+        editTask(task.id, newTitle, newEstimatedTime, newStartHour, newPriority, newDay);
+        document.body.removeChild(modal);
+    });
+    
+    document.getElementById('cancelEdit').addEventListener('click', () => {
+        document.body.removeChild(modal);
+    });
 }
 
 function createStartTimerButton(task) {
@@ -165,6 +263,7 @@ function renderTodoView() {
     `;
     classifierSwitch.querySelector('input').addEventListener('change', (e) => {
         classifierEnabled = e.target.checked;
+        saveClassifierEnabled(); // Save classifier state to localStorage
         renderTasks();
     });
     div.appendChild(classifierSwitch);
@@ -204,17 +303,18 @@ function renderTodoView() {
 function createTaskElement(task) {
     const taskDiv = document.createElement('div');
     taskDiv.className = `task-item ${task.priority ? 'priority' : ''}`;
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     taskDiv.innerHTML = `
         <input type="checkbox" class="task-checkbox" ${task.completed ? 'checked' : ''}>
         <span class="task-title ${task.completed ? 'line-through' : ''}">${task.title}</span>
         <span class="task-time">
-            (${task.estimatedTime}m, starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'})
+            (${task.estimatedTime}m, starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'}, ${days[task.day]})
         </span>
     `;
 
     taskDiv.querySelector('.task-checkbox').addEventListener('change', () => toggleTask(task.id));
     taskDiv.appendChild(createStartTimerButton(task));
-    taskDiv.appendChild(createDeleteButton(task.id));
+    taskDiv.appendChild(createActionButton(task));
 
     return taskDiv;
 }
@@ -234,13 +334,14 @@ function renderKanbanView() {
             const taskDiv = document.createElement('div');
             taskDiv.className = `kanban-task ${task.priority ? 'priority' : ''}`;
             taskDiv.draggable = true;
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             taskDiv.innerHTML = `
-                <span>${task.title} (${task.estimatedTime}m, Starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'})</span>
+                <span>${task.title} (${task.estimatedTime}m, Starts at ${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'}, ${days[task.day]})</span>
             `;
 
             taskDiv.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', task.id));
             taskDiv.appendChild(createStartTimerButton(task));
-            taskDiv.appendChild(createDeleteButton(task.id));
+            taskDiv.appendChild(createActionButton(task));
 
             column.appendChild(taskDiv);
         });
@@ -268,6 +369,7 @@ function renderTableView() {
                 <th>Priority</th>
                 <th>Est. Time</th>
                 <th>Start Time</th>
+                <th>Day</th>
                 <th>Status</th>
                 <th>Actions</th>
             </tr>
@@ -276,6 +378,7 @@ function renderTableView() {
     `;
 
     const tbody = table.querySelector('tbody');
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
     tasks.forEach(task => {
         const tr = document.createElement('tr');
@@ -284,13 +387,14 @@ function renderTableView() {
             <td data-label="Priority">${task.priority ? 'High' : 'Normal'}</td>
             <td data-label="Est. Time">${task.estimatedTime}m</td>
             <td data-label="Start Time">${task.startTime % 12 || 12}:00 ${task.startTime < 12 ? 'AM' : 'PM'}</td>
+            <td data-label="Day">${days[task.day]}</td>
             <td data-label="Status">${task.completed ? 'Done' : 'Pending'}</td>
             <td data-label="Actions"></td>
         `;
 
         const actionsCell = tr.querySelector('td[data-label="Actions"]');
         actionsCell.appendChild(createStartTimerButton(task));
-        actionsCell.appendChild(createDeleteButton(task.id));
+        actionsCell.appendChild(createActionButton(task));
 
         tbody.appendChild(tr);
     });
@@ -299,18 +403,41 @@ function renderTableView() {
 }
 
 function renderCalendarView() {
-    const div = document.createElement('div');
-    div.className = 'calendar-container';
+    const containerDiv = document.createElement('div');
+    containerDiv.className = 'calendar-view-container';
+
+    const buttonsDiv = document.createElement('div');
+    buttonsDiv.className = 'calendar-buttons';
+
+    const downloadPDFButton = document.createElement('button');
+    downloadPDFButton.className = 'calendar-action-btn';
+    downloadPDFButton.innerHTML = '<i data-lucide="file-down"></i>';
+    downloadPDFButton.title = 'Download as PDF';
+    downloadPDFButton.addEventListener('click', downloadAsPDF);
+
+    const printButton = document.createElement('button');
+    printButton.className = 'calendar-action-btn';
+    printButton.innerHTML = '<i data-lucide="printer"></i>';
+    printButton.title = 'Print';
+    printButton.addEventListener('click', printCalendar);
+
+    buttonsDiv.appendChild(downloadPDFButton);
+    buttonsDiv.appendChild(printButton);
+
+    containerDiv.appendChild(buttonsDiv);
+
+    const calendarDiv = document.createElement('div');
+    calendarDiv.className = 'calendar-container';
 
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-    div.innerHTML = '<div class="calendar-header"></div>' + days.map(day => `<div class="calendar-header">${day}</div>`).join('');
+    calendarDiv.innerHTML = '<div class="calendar-header"></div>' + days.map(day => `<div class="calendar-header">${day}</div>`).join('');
 
     for (let hour = 0; hour < 24; hour++) {
         const hourDiv = document.createElement('div');
         hourDiv.className = 'calendar-time';
         hourDiv.textContent = `${hour % 12 || 12}:00 ${hour < 12 ? 'AM' : 'PM'}`;
-        div.appendChild(hourDiv);
+        calendarDiv.appendChild(hourDiv);
 
         for (let day = 0; day < 7; day++) {
             const cellDiv = document.createElement('div');
@@ -334,7 +461,7 @@ function renderCalendarView() {
                 const controlsDiv = document.createElement('div');
                 controlsDiv.className = 'calendar-task-controls';
                 controlsDiv.appendChild(createStartTimerButton(task));
-                controlsDiv.appendChild(createDeleteButton(task.id));
+                controlsDiv.appendChild(createActionButton(task));
                 taskDiv.appendChild(controlsDiv);
 
                 taskDiv.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', task.id));
@@ -342,11 +469,39 @@ function renderCalendarView() {
                 cellDiv.appendChild(taskDiv);
             });
 
-            div.appendChild(cellDiv);
+            calendarDiv.appendChild(cellDiv);
         }
     }
 
-    return div;
+    containerDiv.appendChild(calendarDiv);
+    return containerDiv;
+}
+
+function downloadAsPDF() {
+    const calendarContainer = document.querySelector('.calendar-view-container');
+    
+    // Temporarily hide the buttons
+    const buttons = calendarContainer.querySelector('.calendar-buttons');
+    buttons.style.display = 'none';
+
+    html2canvas(calendarContainer).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jspdf.jsPDF({
+            orientation: 'landscape',
+            unit: 'px',
+            format: [canvas.width, canvas.height]
+        });
+
+        pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+        pdf.save('calendar.pdf');
+
+        // Show the buttons again
+        buttons.style.display = 'flex';
+    });
+}
+
+function printCalendar() {
+    window.print();
 }
 
 function startTaskTimer(task) {
@@ -414,5 +569,44 @@ function completeTask() {
     }
 }
 
-// Initialize the view
-setView('todo');
+// New functions for data persistence
+function saveTasks() {
+    localStorage.setItem('tasks', JSON.stringify(tasks));
+}
+
+function loadTasks() {
+    const savedTasks = localStorage.getItem('tasks');
+    if (savedTasks) {
+        tasks = JSON.parse(savedTasks);
+    }
+}
+
+function saveView() {
+    localStorage.setItem('view', view);
+}
+
+function loadView() {
+    const savedView = localStorage.getItem('view');
+    if (savedView) {
+        view = savedView;
+    }
+}
+
+function saveClassifierEnabled() {
+    localStorage.setItem('classifierEnabled', JSON.stringify(classifierEnabled));
+}
+
+function loadClassifierEnabled() {
+    const savedClassifierEnabled = localStorage.getItem('classifierEnabled');
+    if (savedClassifierEnabled !== null) {
+        classifierEnabled = JSON.parse(savedClassifierEnabled);
+    }
+}
+
+// Initialize the app
+document.addEventListener('DOMContentLoaded', () => {
+    loadTasks();
+    loadView();
+    loadClassifierEnabled();
+    setView(view);
+});
